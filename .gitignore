@@ -1,2 +1,14 @@
+# Python キャッシュ/ビルド生成物
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# 仮想環境
+.venv/
+venv/
+
+# その他
 .env
 token.json
