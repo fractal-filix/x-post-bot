@@ -1,11 +1,21 @@
 import os
 from dotenv import load_dotenv
+from dotenv import dotenv_values
 import tweepy
 import json
 
 TOKEN_FILE = "token.json"
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 load_dotenv()
+
+def get_env(key):
+    # まず環境変数（GitHub Actionsのsecret含む）を優先
+    value = os.getenv(key)
+    if value is not None:
+        return value
+    # .envファイル（dotenv）もサポート
+    env_dict = dotenv_values()
+    return env_dict.get(key)
 
 def save_token(token):
     with open(TOKEN_FILE, "w") as f:
@@ -21,17 +31,17 @@ def refresh_token(oauth2, refresh_token):
     token = oauth2.refresh_token(
         token_url="https://api.twitter.com/2/oauth2/token",
         refresh_token=refresh_token,
-        client_id=os.getenv("X_CLIENT_ID"),
-        client_secret=os.getenv("X_CLIENT_SECRET"),
+        client_id=get_env("X_CLIENT_ID"),
+        client_secret=get_env("X_CLIENT_SECRET"),
     )
     save_token(token)
     return token
 
 oauth2 = tweepy.OAuth2UserHandler(
-    client_id=os.getenv("X_CLIENT_ID"),
-    redirect_uri=os.getenv("X_REDIRECT_URI"),
+    client_id=get_env("X_CLIENT_ID"),
+    redirect_uri=get_env("X_REDIRECT_URI"),
     scope=["tweet.read", "tweet.write", "users.read", "offline.access"],
-    client_secret=os.getenv("X_CLIENT_SECRET")
+    client_secret=get_env("X_CLIENT_SECRET")
 )
 
 token = load_token()
