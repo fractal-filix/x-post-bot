@@ -1,30 +1,53 @@
-import os, sys
+import asyncio, os, sys
+from typing import cast, Any
 from oauth2_flow import ensure_token_interactive
 from x_api import client_from_access_token, create_text_tweet
+from notion_queue import pick_ready, page_text, mark_posted
 
-def main():
-    # テキストは環境変数 or 引数から
-    text = os.getenv("POST_TEXT") or (sys.argv[1] if len(sys.argv) > 1 else "OAuth2 テスト投稿 ✅")
+def getenv_str(name: str) -> str:
+    v = os.getenv(name)
+    if not v:
+        print(f"ENV {name} is required.", file=sys.stderr)
+        sys.exit(1)
+    return v
+
+async def main():
+    # Notion の接続情報を取得
+    notion_token = getenv_str("NOTION_TOKEN")
+    notion_db_id = getenv_str("NOTION_DB_ID")
 
     token = ensure_token_interactive()
     client = client_from_access_token(token["access_token"])
 
+    # Notion から 1 件取得
+    n, page = await pick_ready(notion_token, notion_db_id)
+    if not page:
+        print("⚠️ Notion: Status=ready の投稿が見つかりません。終了。")
+        return
+
+    text = page_text(page)
+    if not text:
+        print("⚠️ Notion: Text(Title) が空のためスキップ。")
+        return
+
     try:
         res = create_text_tweet(client, text)
         if res.get("id"):
-            print("✅ 投稿しました！tweet_id =", res["id"])
+            print("✅ 投稿成功 tweet_id =", res["id"])
         else:
-            # 念のためのフォールバック（型不一致時など）
-            print("✅ 投稿しました（ID取得できず）")
-        # author_id は create_tweet 応答に含まれないことが多いのでURL生成は控える
+            print("✅ 投稿成功（ID取得できず）")
+        # 投稿できたら posted に更新
+        await mark_posted(n, page["id"])
     except Exception as e:
-        # duplicate は403/エラーメッセージで判断できる
         msg = str(e).lower()
         if "duplicate" in msg:
-            print("✅ 重複検知：スキップ扱い")
-            sys.exit(0)
+            print("✅ 重複検知：スキップ扱い（posted に更新）")
+            await mark_posted(n, page["id"])
+            return
         print("❌ 投稿失敗:", e)
-        sys.exit(1)
+        raise
+    finally:
+        await cast(Any, n).aclose()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
