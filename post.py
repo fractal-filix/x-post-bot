@@ -1,5 +1,6 @@
 import asyncio, os, sys
 from typing import cast, Any
+from config import get_notion_config
 from oauth2_flow import ensure_token_interactive
 from x_api import client_from_access_token, create_text_tweet
 from notion_queue import pick_ready, page_text, mark_posted
@@ -13,8 +14,9 @@ def getenv_str(name: str) -> str:
 
 async def main():
     # Notion の接続情報を取得
-    notion_token = getenv_str("NOTION_TOKEN")
-    notion_db_id = getenv_str("NOTION_DB_ID")
+    notion = get_notion_config()
+    notion_token = notion["token"]
+    notion_db_id = notion["db_id"]
 
     token = ensure_token_interactive()
     client = client_from_access_token(token["access_token"])

@@ -16,7 +16,16 @@ def get_env(key) -> str:
     print(f"環境変数または.envに {key} がありません", file=sys.stderr)
     sys.exit(1)
 
+def get_notion_config():
+    """
+    既存のget_env流儀に合わせた薄いラッパ。
+    戻りは扱いやすいdict（token/db_id）に統一。
+    """
+    return {"token": NOTION_TOKEN, "db_id": NOTION_DB_ID}
+
 TOKEN_FILE: str = "token.json"
 X_CLIENT_ID: str = get_env("X_CLIENT_ID")
 X_CLIENT_SECRET: str = get_env("X_CLIENT_SECRET")
 X_REDIRECT_URI: str = get_env("X_REDIRECT_URI")
+NOTION_TOKEN: str = get_env("NOTION_TOKEN")
+NOTION_DB_ID: str = get_env("NOTION_DB_ID")
