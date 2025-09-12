@@ -7,10 +7,13 @@ from notion_client import AsyncClient
 
 STATUS_READY = os.getenv("NOTION_STATUS_READY", "ready")
 STATUS_POSTED = os.getenv("NOTION_STATUS_POSTED", "posted")
-TITLE_PROP = os.getenv("NOTION_TITLE_PROP", "Text")  # Title型のプロパティ名
+CONTENT_PROP = os.getenv("NOTION_CONTENT_PROP", "Text")  # 投稿内容のプロパティ名
 
-def _title_plain(props: dict) -> str:
-    arr = props[TITLE_PROP]["title"]
+def _content_plain(props: dict) -> str:
+    prop = props[CONTENT_PROP]
+    if "rich_text" not in prop:
+        raise ValueError(f"Property {CONTENT_PROP} must be a rich_text type")
+    arr = prop["rich_text"]
     return "".join(x.get("plain_text", "") for x in arr).strip()
 
 async def pick_ready(notion_token: str, db_id: str) -> Tuple[AsyncClient, Optional[dict]]:
@@ -34,7 +37,7 @@ async def pick_ready(notion_token: str, db_id: str) -> Tuple[AsyncClient, Option
     return n, (rs[0] if rs else None)
 
 def page_text(page: dict) -> str:
-    return _title_plain(page["properties"])
+    return _content_plain(page["properties"])
 
 async def mark_posted(n: AsyncClient, page_id: str) -> None:
     await n.pages.update(
