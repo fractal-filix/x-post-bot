@@ -2,7 +2,7 @@ name: Post to X
 
 on:
   schedule:
-    - cron: '0 23 * * *'  # JST 8:00相当（GitHubはUTC）
+    - cron: '0 11 * * *'  # JST 20:00相当（GitHubはUTC）
   workflow_dispatch:  # 手動実行もできるように
 
 permissions:
