@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 from requests_oauthlib import OAuth2Session
+from requests.auth import HTTPBasicAuth
 
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 
@@ -40,12 +41,12 @@ def _refresh(token:dict, client_id:str, client_secret:str) -> dict:
     if not token.get("refresh_token"):
         raise RuntimeError("No refresh_token found; interactive re-auth required.")
     sess = OAuth2Session(client_id=client_id, token=token)
+    # X(Twitter) OAuth2: 機密クライアントは Basic 認証必須
+    # （client_id/secret をボディに入れるのではなく Authorization: Basic ... で送る）
     new_token = sess.refresh_token(
         TOKEN_URL,
         refresh_token=token["refresh_token"],
-        client_id=client_id,
-        client_secret=client_secret,
-        include_client_id=True,
+        auth=HTTPBasicAuth(client_id, client_secret),
     )
     new_token["_refreshed_at"] = _now_iso()
     return new_token
