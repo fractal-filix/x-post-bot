@@ -20,6 +20,7 @@ import boto3
 from botocore.exceptions import ClientError
 from requests_oauthlib import OAuth2Session
 from requests.auth import HTTPBasicAuth
+import requests
 
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 
@@ -37,17 +38,22 @@ def _save_token_to_ssm(name:str, region:str, token:dict):
     value = json.dumps(token, ensure_ascii=False, indent=2)
     ssm.put_parameter(Name=name, Type="SecureString", Value=value, Overwrite=True)
 
-def _refresh(token:dict, client_id:str, client_secret:str) -> dict:
+def _refresh(token:dict, client_id:str) -> dict:
     if not token.get("refresh_token"):
         raise RuntimeError("No refresh_token found; interactive re-auth required.")
-    sess = OAuth2Session(client_id=client_id, token=token)
-    # X(Twitter) OAuth2: 機密クライアントは Basic 認証必須
-    # （client_id/secret をボディに入れるのではなく Authorization: Basic ... で送る）
-    new_token = sess.refresh_token(
-        TOKEN_URL,
-        refresh_token=token["refresh_token"],
-        auth=HTTPBasicAuth(client_id, client_secret),
-    )
+    refresh_token = token["refresh_token"].strip()
+    # PKCEのrefreshは Basic 認証ではなく、client_id をボディに含める
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    resp = requests.post(TOKEN_URL, data=data, headers=headers, timeout=20)
+    if not resp.ok:
+        # 返ってきたエラー本文をそのまま見られるように
+        raise RuntimeError(f"{resp.status_code} {resp.text}")
+    new_token = resp.json()
     new_token["_refreshed_at"] = _now_iso()
     return new_token
 
@@ -55,12 +61,8 @@ def main():
     region = os.environ.get("AWS_REGION", "ap-northeast-1")
     name = os.environ.get("SSM_PARAM_NAME", "/x-post-bot/token.json")
     cid  = os.environ.get("X_CLIENT_ID")
-    csec = os.environ.get("X_CLIENT_SECRET")
-    redir= os.environ.get("X_REDIRECT_URI")  # 存在チェックのみ
 
-    missing = [k for k,v in {
-        "X_CLIENT_ID":cid, "X_CLIENT_SECRET":csec, "X_REDIRECT_URI":redir
-    }.items() if not v]
+    missing = [k for k,v in {"X_CLIENT_ID": cid}.items() if not v]
     if missing:
         print(f"[ERROR] Missing envs: {', '.join(missing)}", file=sys.stderr)
         sys.exit(2)
@@ -72,7 +74,11 @@ def main():
         print(f"[ERROR] SSM get failed: {e}", file=sys.stderr); sys.exit(1)
 
     try:
-        new_token = _refresh(token, cid, csec)
+        # 参考デバッグ（マスク）
+        rt = token.get("refresh_token", "")
+        assert cid is not None
+        print(f"[DEBUG] cid={cid[:6]}... len(refresh_token)={len(rt)}")
+        new_token = _refresh(token, cid)
     except Exception as e:
         # リフレッシュ失敗時は needs_reauth を立てて保存し、明示的に失敗終了
         token["needs_reauth"] = True
