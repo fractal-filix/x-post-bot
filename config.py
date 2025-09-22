@@ -29,3 +29,7 @@ X_CLIENT_SECRET: str = get_env("X_CLIENT_SECRET")
 X_REDIRECT_URI: str = get_env("X_REDIRECT_URI")
 NOTION_TOKEN: str = get_env("NOTION_TOKEN")
 NOTION_DB_ID: str = get_env("NOTION_DB_ID")
+
+# AWS Parameter Store settings (optional)
+AWS_REGION: str = os.getenv("AWS_REGION", "ap-northeast-1")
+SSM_PARAM_NAME: str = os.getenv("SSM_PARAM_NAME", "/x-post-bot/token.json")
