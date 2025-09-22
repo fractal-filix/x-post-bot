@@ -2,25 +2,16 @@
 # -*- coding: utf-8 -*-
 import json, os, sys, base64
 from datetime import datetime, timezone
-import boto3
-from botocore.exceptions import ClientError
 import requests
+
+# 親ディレクトリのparameter_storeモジュールをインポート
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from parameter_store import load_token_from_parameter_store, save_token_to_parameter_store
 
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-def _load_token_from_ssm(name:str, region:str) -> dict:
-    ssm = boto3.client("ssm", region_name=region)
-    resp = ssm.get_parameter(Name=name, WithDecryption=True)
-    raw = resp["Parameter"]["Value"].lstrip("\ufeff").strip()
-    return json.loads(raw)
-
-def _save_token_to_ssm(name:str, region:str, token:dict):
-    ssm = boto3.client("ssm", region_name=region)
-    value = json.dumps(token, ensure_ascii=False, indent=2)
-    ssm.put_parameter(Name=name, Type="SecureString", Value=value, Overwrite=True)
 
 def _refresh(token:dict, client_id:str, client_secret:str|None) -> dict:
     rt = (token.get("refresh_token") or "").strip()
@@ -61,9 +52,9 @@ def main():
 
     print(f"[INFO] Refresh start (region={region}, ssm={name})")
     try:
-        token = _load_token_from_ssm(name, region)
-    except ClientError as e:
-        print(f"[ERROR] SSM get failed: {e}", file=sys.stderr); sys.exit(1)
+        token = load_token_from_parameter_store(name, region)
+    except Exception as e:
+        print(f"[ERROR] Parameter Store 読み込み失敗: {e}", file=sys.stderr); sys.exit(1)
 
     try:
         rt = token.get("refresh_token", "")
@@ -72,15 +63,19 @@ def main():
     except Exception as e:
         token["needs_reauth"] = True
         token["_refresh_error"] = {"message": str(e), "at": _now_iso()}
-        try: _save_token_to_ssm(name, region, token)
-        except Exception as e2: print(f"[WARN] SSM put after fail: {e2}", file=sys.stderr)
+        try: 
+            save_token_to_parameter_store(token, name, region)
+        except Exception as e2: 
+            print(f"[WARN] Parameter Store 保存失敗 (after refresh error): {e2}", file=sys.stderr)
         print(f"[ERROR] Refresh failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     try:
-        _save_token_to_ssm(name, region, new_token)
-    except ClientError as e:
-        print(f"[ERROR] SSM put failed: {e}", file=sys.stderr); sys.exit(1)
+        success = save_token_to_parameter_store(new_token, name, region)
+        if not success:
+            raise RuntimeError("Parameter Store 保存に失敗しました")
+    except Exception as e:
+        print(f"[ERROR] Parameter Store 保存失敗: {e}", file=sys.stderr); sys.exit(1)
     print("[INFO] Token refreshed & saved ✅")
 
 if __name__ == "__main__":

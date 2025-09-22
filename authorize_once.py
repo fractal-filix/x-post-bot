@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 
 import requests
 from dotenv import load_dotenv
+from parameter_store import upload_token_with_confirmation
 
 AUTH_URL  = "https://twitter.com/i/oauth2/authorize"
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
@@ -40,6 +41,10 @@ def main():
     client_secret = os.getenv("X_CLIENT_SECRET", "").strip() or None
     redirect_uri  = os.getenv("X_REDIRECT_URI", "").strip()
     scopes        = os.getenv("X_SCOPES", "tweet.read tweet.write users.read offline.access").strip()
+    
+    # AWS Parameter Store設定（デフォルト値付き）
+    aws_region = os.getenv("AWS_REGION", "ap-northeast-1").strip()
+    aws_parameter_name = os.getenv("SSM_PARAM_NAME", "/x-post-bot/token.json").strip()
 
     if not client_id or not redirect_uri:
         print("[ERROR] .envに X_CLIENT_ID / X_REDIRECT_URI が設定されていません", file=sys.stderr)
@@ -104,6 +109,9 @@ def main():
     print(f"[INFO] refresh_token length = {len(rt)}")
     if len(rt) < 20:
         print("[WARN] refresh_token が短すぎます。offline.access が付与されていない可能性があります。")
+    
+    # AWS Parameter Store へのアップロード（ユーザー確認付き）
+    upload_token_with_confirmation(token, aws_region, aws_parameter_name)
 
 if __name__ == "__main__":
     main()
