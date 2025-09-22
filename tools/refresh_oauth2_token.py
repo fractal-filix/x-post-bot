@@ -35,11 +35,31 @@ def _refresh(token:dict, client_id:str, client_secret:str|None) -> dict:
             "client_id": client_id,
         }
 
+    print(f"[DEBUG] Sending refresh request to {TOKEN_URL}")
     resp = requests.post(TOKEN_URL, data=data, headers=headers, timeout=20)
+    
     if not resp.ok:
-        raise RuntimeError(f"{resp.status_code} {resp.text}")
+        error_detail = resp.text
+        print(f"[ERROR] OAuth2 refresh failed - Status: {resp.status_code}, Response: {error_detail}", file=sys.stderr)
+        
+        # より詳細なエラー分析
+        try:
+            error_json = resp.json()
+            error_code = error_json.get("error", "unknown_error")
+            error_desc = error_json.get("error_description", "No description")
+            
+            if error_code == "invalid_request" and "token was invalid" in error_desc:
+                raise RuntimeError(f"Refresh token is invalid or expired. Re-authentication required. Error: {error_code} - {error_desc}")
+            elif error_code == "invalid_grant":
+                raise RuntimeError(f"Refresh token is invalid, expired, or revoked. Re-authentication required. Error: {error_code} - {error_desc}")
+            else:
+                raise RuntimeError(f"OAuth2 refresh failed: {error_code} - {error_desc}")
+        except json.JSONDecodeError:
+            raise RuntimeError(f"OAuth2 refresh failed with HTTP {resp.status_code}: {error_detail}")
+    
     new_token = resp.json()
     new_token["_refreshed_at"] = _now_iso()
+    print(f"[INFO] ✅ Token refresh successful. New access token obtained.")
     return new_token
 
 def main():
@@ -56,18 +76,64 @@ def main():
     except Exception as e:
         print(f"[ERROR] Parameter Store 読み込み失敗: {e}", file=sys.stderr); sys.exit(1)
 
+    # トークンの状態チェック
+    if token.get("needs_reauth"):
+        print("[ERROR] 🔒 Token is marked as requiring re-authentication.", file=sys.stderr)
+        print("[ERROR] 📋 Previous refresh attempts have failed.", file=sys.stderr)
+        print("[ERROR] 💡 Manual OAuth2 flow required before automatic refresh can resume.", file=sys.stderr)
+        sys.exit(1)
+
+    # 前回のリフレッシュエラーの確認
+    last_error = token.get("_refresh_error")
+    if last_error and last_error.get("requires_reauth"):
+        print(f"[ERROR] 🔑 Previous refresh failure requires re-authentication: {last_error.get('message', 'Unknown error')}", file=sys.stderr)
+        print(f"[ERROR] 📅 Error occurred at: {last_error.get('at', 'Unknown time')}", file=sys.stderr)
+        sys.exit(1)
+
     try:
         rt = token.get("refresh_token", "")
         print(f"[DEBUG] cid={cid[:6]}... len(refresh_token)={len(rt)} confidential={'yes' if csec else 'no'}")
+        
+        # リフレッシュトークンの基本的な検証
+        if not rt or len(rt) < 20:
+            raise RuntimeError("Refresh token is missing or too short. Re-authentication required.")
+        
         new_token = _refresh(token, cid, csec)
+        
+        # 成功時は以前のエラー情報をクリア
+        new_token.pop("needs_reauth", None)
+        new_token.pop("_refresh_error", None)
+        
     except Exception as e:
-        token["needs_reauth"] = True
-        token["_refresh_error"] = {"message": str(e), "at": _now_iso()}
+        error_msg = str(e)
+        print(f"[ERROR] Refresh failed: {error_msg}", file=sys.stderr)
+        
+        # エラーの種類に応じた詳細なログ出力
+        if "invalid" in error_msg.lower() or "expired" in error_msg.lower():
+            print("[ERROR] 🔑 Refresh token is invalid or expired.", file=sys.stderr)
+            print("[ERROR] 📋 Action required: Manual re-authentication needed.", file=sys.stderr)
+            print("[ERROR] 💡 Run the OAuth2 flow again to get a new token.", file=sys.stderr)
+            token["needs_reauth"] = True
+            token["_refresh_error"] = {
+                "message": error_msg, 
+                "at": _now_iso(),
+                "requires_reauth": True
+            }
+        else:
+            print("[ERROR] ⚠️  Temporary refresh failure. May succeed on retry.", file=sys.stderr)
+            token["_refresh_error"] = {
+                "message": error_msg, 
+                "at": _now_iso(),
+                "requires_reauth": False
+            }
+        
+        # エラー状態をParameter Storeに保存
         try: 
             save_token_to_parameter_store(token, name, region)
+            print("[INFO] Error state saved to Parameter Store for debugging.", file=sys.stderr)
         except Exception as e2: 
             print(f"[WARN] Parameter Store 保存失敗 (after refresh error): {e2}", file=sys.stderr)
-        print(f"[ERROR] Refresh failed: {e}", file=sys.stderr)
+        
         sys.exit(1)
 
     try:

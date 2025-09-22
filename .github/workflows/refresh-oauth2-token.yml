@@ -31,3 +31,17 @@ jobs:
           X_CLIENT_SECRET: ${{ secrets.X_CLIENT_SECRET }}
           X_REDIRECT_URI: ${{ secrets.X_REDIRECT_URI }}
         run: python tools/refresh_oauth2_token.py
+      
+      - name: Handle refresh failure
+        if: failure()
+        run: |
+          echo "🔑 OAuth2 token refresh failed!"
+          echo "📋 This likely means the refresh token has expired or been revoked."
+          echo "💡 Manual re-authentication is required."
+          echo "🔧 Please run the OAuth2 flow locally and update the Parameter Store."
+          echo ""
+          echo "Steps to fix:"
+          echo "1. Run 'python oauth2_flow.py' locally"
+          echo "2. Complete the OAuth2 authorization flow"
+          echo "3. Upload the new token to Parameter Store"
+          exit 1
