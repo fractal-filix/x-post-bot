@@ -5,6 +5,11 @@ on:
     - cron: '0 11 * * *'  # JST 20:00相当（GitHubはUTC）
   workflow_dispatch:  # 手動実行もできるように
 
+# 🔒 同時実行を排他（再実行が重なっても直列に処理）
+concurrency:
+  group: x-post-bot-post
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
