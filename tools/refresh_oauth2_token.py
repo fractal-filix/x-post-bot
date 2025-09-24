@@ -5,8 +5,11 @@ from datetime import datetime, timezone
 import requests
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception as e:
+    print(f"[WARN] dotenv not available; skipping .env loading ({e})")
 
 # Add parent directory to sys.path for absolute imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
