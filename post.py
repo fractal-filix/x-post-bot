@@ -4,6 +4,7 @@ from config import get_notion_config
 from oauth2_flow import ensure_token_interactive
 from x_api import client_from_access_token, create_text_tweet
 from notion_queue import pick_ready, page_text, mark_posted
+from parameter_store import load_token_from_parameter_store
 
 def getenv_str(name: str) -> str:
     v = os.getenv(name)
@@ -18,8 +19,16 @@ async def main():
     notion_token = notion["token"]
     notion_db_id = notion["db_id"]
 
-    token = ensure_token_interactive()
-    client = client_from_access_token(token["access_token"])
+    # 🔒 リフレッシュは前段ワークフロー tools/refresh_oauth2_token.py のみで実施
+    # ここでは「SSM から読むだけ」に限定し、書き戻し・再認可は行わない
+    ssm_param = os.getenv("SSM_PARAM_NAME", "/x-post-bot/token.json")
+    region = os.getenv("AWS_REGION", "ap-northeast-1")
+    token = load_token_from_parameter_store(ssm_param, region)
+    access_token = token.get("access_token")
+    if not access_token:
+        print("❌ access_token が見つかりません。前段のリフレッシュに失敗している可能性があります。", file=sys.stderr)
+        sys.exit(1)
+    client = client_from_access_token(access_token)
 
     # Notion から 1 件取得
     n, page = await pick_ready(notion_token, notion_db_id)
