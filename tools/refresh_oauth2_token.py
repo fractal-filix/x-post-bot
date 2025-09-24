@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 import requests
 
 # 親ディレクトリのparameter_storeモジュールをインポート
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from parameter_store import load_token_from_parameter_store, save_token_to_parameter_store
+from ..parameter_store import load_token_from_parameter_store, save_token_to_parameter_store
 
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
+ERROR_PARAM_NAME = "/x-post-bot/token_error.json"
 
 # --- debug helpers (mask & hash) ---
 def _mask(s: str, head: int = 4, tail: int = 4) -> str:
@@ -157,13 +157,6 @@ def main():
                 "requires_reauth": False
             }
         
-        # エラー状態をParameter Storeに保存
-        try: 
-            save_token_to_parameter_store(token, name, region)
-            print("[INFO] Error state saved to Parameter Store for debugging.", file=sys.stderr)
-        except Exception as e2: 
-            print(f"[WARN] Parameter Store 保存失敗 (after refresh error): {e2}", file=sys.stderr)
-        
         sys.exit(1)
 
     try:
@@ -190,4 +183,28 @@ def main():
     print("[INFO] Token refreshed & saved ✅")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        # ここで“本番キー”を触らない。デバッグ用に別キーへ退避のみ。
+        try:
+            import os, json
+            region = os.getenv("AWS_REGION", "ap-northeast-1")
+            name = os.getenv("SSM_PARAM_NAME", "/x-post-bot/token.json")
+            # 現状のSSM値を読み、それにエラーメタを付けて error キーへ保存
+            current = {}
+            try:
+                current = load_token_from_parameter_store(name, region)
+            except Exception:
+                current = {}
+            err = {
+                "_error": str(e),
+                "_at": _now_iso(),
+                "_source": "refresh_oauth2_token.py",
+                "snapshot": current,
+            }
+            save_token_to_parameter_store(err, ERROR_PARAM_NAME, region)
+            print("[INFO] Error state saved to Parameter Store for debugging (separate key).")
+        except Exception:
+            pass
+        raise
