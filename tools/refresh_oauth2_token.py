@@ -10,6 +10,23 @@ from parameter_store import load_token_from_parameter_store, save_token_to_param
 
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 
+# --- debug helpers (mask & hash) ---
+def _mask(s: str, head: int = 4, tail: int = 4) -> str:
+    if not s:
+        return "<empty>"
+    if len(s) <= head + tail:
+        return s
+    return f"{s[:head]}...{s[-tail:]}"
+
+def _sha8(s: str) -> str:
+    """
+    SHA-256 の先頭8桁だけ出す（機密は漏らさず指紋化）
+    """
+    if not s:
+        return "--------"
+    import hashlib
+    return hashlib.sha256(s.encode()).hexdigest()[:8]
+
 def _now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -58,6 +75,15 @@ def _refresh(token:dict, client_id:str, client_secret:str|None) -> dict:
             raise RuntimeError(f"OAuth2 refresh failed with HTTP {resp.status_code}: {error_detail}")
     
     new_token = resp.json()
+    # （診断ログ）レスポンスに新しい refresh_token が含まれているかを可視化
+    try:
+        _rt_resp = new_token.get("refresh_token", "")
+        print(
+            f"[DEBUG] refresh_resp "
+            f"rt(sig={_mask(_rt_resp)},sha8={_sha8(_rt_resp)},len={len(_rt_resp)})"
+        )
+    except Exception:
+        pass
     new_token["_refreshed_at"] = _now_iso()
     print(f"[INFO] ✅ Token refresh successful. New access token obtained.")
     return new_token
@@ -92,7 +118,11 @@ def main():
 
     try:
         rt = token.get("refresh_token", "")
-        print(f"[DEBUG] cid={cid[:6]}... len(refresh_token)={len(rt)} confidential={'yes' if csec else 'no'}")
+        print(
+            f"[DEBUG] cid={cid[:6]}... "
+            f"rt(sig={_mask(rt)},sha8={_sha8(rt)},len={len(rt)}) "
+            f"confidential={'yes' if csec else 'no'}"
+        )
         
         # リフレッシュトークンの基本的な検証
         if not rt or len(rt) < 20:
@@ -142,6 +172,21 @@ def main():
             raise RuntimeError("Parameter Store 保存に失敗しました")
     except Exception as e:
         print(f"[ERROR] Parameter Store 保存失敗: {e}", file=sys.stderr); sys.exit(1)
+
+    # （診断ログ）保存直後に read-back して同一性を確認
+    try:
+        _rb = load_token_from_parameter_store(name, region)
+        _rb_rt  = _rb.get("refresh_token", "")
+        _new_rt = new_token.get("refresh_token", "")
+        _match  = "OK" if _rb_rt == _new_rt else "MISMATCH"
+        print(
+            f"[DEBUG] ssm_readback "
+            f"rt(sig={_mask(_rb_rt)},sha8={_sha8(_rb_rt)},len={len(_rb_rt)}) "
+            f"match={_match}"
+        )
+    except Exception as e:
+        print(f"[WARN] read-back check failed: {e}")
+
     print("[INFO] Token refreshed & saved ✅")
 
 if __name__ == "__main__":
