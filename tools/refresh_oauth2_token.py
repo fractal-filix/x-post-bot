@@ -3,9 +3,16 @@
 import json, os, sys, base64
 from datetime import datetime, timezone
 import requests
+from dotenv import load_dotenv
 
-# 親ディレクトリのparameter_storeモジュールをインポート
-from ..parameter_store import load_token_from_parameter_store, save_token_to_parameter_store
+# Load environment variables from .env file
+load_dotenv()
+
+# Add parent directory to sys.path for absolute imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import from parameter_store module
+from parameter_store import load_token_from_parameter_store, save_token_to_parameter_store
 
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 ERROR_PARAM_NAME = "/x-post-bot/token_error.json"
