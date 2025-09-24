@@ -3,7 +3,6 @@
 import json, os, sys, base64
 from datetime import datetime, timezone
 import requests
-from dotenv import load_dotenv
 
 try:
     from dotenv import load_dotenv
