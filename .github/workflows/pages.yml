@@ -31,10 +31,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
+          # ドキュメント生成用の依存関係をインストール
+          if [ -f requirements-docs.txt ]; then
+            pip install -r requirements-docs.txt
           else
-            # 最低限：MkDocs + Material（mermaidはローカル同梱方式）
+            # フォールバック: 最低限のMkDocs + Material
             pip install mkdocs mkdocs-material pymdown-extensions
           fi
 
