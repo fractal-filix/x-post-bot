@@ -19,7 +19,13 @@ def _content_plain(props: dict) -> str:
 
 async def pick_ready(notion_token: str, db_id: str) -> Tuple[AsyncClient, Optional[dict]]:
     n = AsyncClient(auth=notion_token)
-    now_iso = datetime.datetime.utcnow().isoformat()
+    # 現在時刻をタイムゾーン付きの UTC にして、Z で明示
+    now_iso = (
+        datetime.datetime.now(datetime.timezone.utc)
+        .replace(microsecond=0)              # 小数秒は不要なので切り捨て
+        .isoformat()                         # ex.'2025-11-01T23:11:58+00:00'
+        .replace("+00:00", "Z")              # ex.'2025-11-01T23:11:58Z'
+    )
     
     # デバッグ用：フィルター条件をログ出力  
     # より厳密なフィルター条件を構築
