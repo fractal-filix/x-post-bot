@@ -1,0 +1,38 @@
+site_name: Xポストボット Docs
+site_description: Notion→X 自動投稿の設計と運用
+site_url: https://fractal-filix.github.io/x-post-bot/
+theme:
+  name: material
+  language: ja
+  features:
+    - navigation.instant
+    - content.code.copy
+    - navigation.sections
+    - navigation.tracking
+    - toc.follow
+plugins:
+  - search
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - footnotes
+  - attr_list
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+
+extra_javascript:
+  - javascripts/mermaid.min.js
+  - javascripts/mermaid-init.js
+
+nav:
+  - はじめに: index.md
+  - アーキテクチャ:
+      - アクティビティ図: activity-diagram.md
+      - コンポーネント構成: components.md
+  - リファクタリング計画: refactor-plan.md
+  - 設定リファレンス: config-reference.md
