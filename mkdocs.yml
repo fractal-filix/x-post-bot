@@ -1,6 +1,6 @@
 site_name: Xポストボット Docs
 site_description: Notion→X 自動投稿の設計と運用
-site_url: https://example.com  # 後でGitHub PagesのURLに変更
+site_url: https://fractal-filix.github.io/x-post-bot/
 theme:
   name: material
   language: ja
